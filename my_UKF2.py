@@ -210,7 +210,7 @@ def apply_forces(model, data, forces):
 
     for i, body_id in enumerate(body_ids):
         # Extract the scalar force for the current finger
-        scalar_force = forces[i]
+        scalar_force = forces[i]*10
         # print(scalar_force)
         # Get the rotation matrix from the global frame to the local frame
         body_xmat = data.xmat[body_id].reshape(3, 3)
@@ -299,6 +299,7 @@ ukf.hx = hx
 obs = env.reset()
 frames = []
 for idx in tqdm(range(kinematics.shape[0])):
+# for idx in tqdm(range(200)):
     # Reference 
     data_ref.qpos = kinematics[idx, 1:]
     mj.mj_step1(model_ref, data_ref)

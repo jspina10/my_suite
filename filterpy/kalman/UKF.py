@@ -362,7 +362,7 @@ class UnscentedKalmanFilter(object):
         self.P_post = self.P.copy()
 
     def predict(self, dt=None, UT=None, fx=None, **fx_args):
-        """
+        r"""
         Performs the predict step of the UKF. On return, self.x and
         self.P contain the predicted state (x) and covariance (P). '
 
@@ -489,7 +489,6 @@ class UnscentedKalmanFilter(object):
         self._log_likelihood = None
         self._likelihood = None
         self._mahalanobis = None
-        return self.x
 
     def cross_variance(self, x, z, sigmas_f, sigmas_h):
         """
@@ -605,6 +604,7 @@ class UnscentedKalmanFilter(object):
                     'each element in zs must be a 1D array of length {}'.format(self._dim_z))
 
         z_n = len(zs)
+
         if Rs is None:
             Rs = [self.R] * z_n
 
