@@ -117,7 +117,35 @@ def plot_qxxx(qxxx, joint_names, labels):
     legend_ax.legend(line_objects, labels, loc='center')
     plt.tight_layout()
     # plt.show()
-    plt.savefig('graphs/UKF2_qpos.png')  # Save the plot to a file
+    plt.savefig('graphs/UKF2_qpos_draft.png')  # Save the plot to a file
+    plt.close()  # Close the figure to free memory
+def plot_fxxx(fxxx, fingertips_names, labels):
+    """
+    Plot generalized variables to be compared.
+    fxxx[:,0,-1] = time axis
+    fxxx[:,1:,n] = n-th sequence
+    fxxx[:,1:,-1] = reference sequence
+    """
+    fig, axs = plt.subplots(2, 3, figsize=(12, 8))
+    axs = axs.flatten()
+    line_objects = []
+    linestyle = ['-'] * fxxx.shape[2]
+    linestyle[-1] = '--'
+    for j in range(1, len(fingertips_names)+1):
+        ax = axs[j-1]
+        for i in range(fxxx.shape[2]):
+            line, = ax.plot(fxxx[:, 0, -1], fxxx[:, j, i], linestyle[i])
+            if j == 1: # add only one set of lines to the legend
+                line_objects.append(line)
+        ax.set_xlim([fxxx[:, 0].min(), fxxx[:, 0].max()])
+        ax.set_ylim([fxxx[:, 1:, :].min(), fxxx[:, 1:, :].max()])
+        ax.set_title(fingertips_names[j-1])
+    legend_ax = axs[len(fingertips_names)] # create legend in the 24th subplot area
+    legend_ax.axis('off')
+    legend_ax.legend(line_objects, labels, loc='center')
+    plt.tight_layout()
+    # plt.show()
+    plt.savefig('graphs/UKF2_frcs_draft.png')  # Save the plot to a file
     plt.close()  # Close the figure to free memory
 def get_qfrc(model, data, target_qpos):
     """
@@ -191,7 +219,7 @@ def plot_qxxx_2d(qxxx, joint_names, labels):
     legend_ax.legend(line_objects, labels, loc='center')
     plt.tight_layout()
     # plt.show()
-    plt.savefig('graphs/UKF2_qfrc.png')  # Save the plot to a file
+    plt.savefig('graphs/UKF2_qfrc_draft.png')  # Save the plot to a file
     plt.close()  # Close the figure to free memory
 def plot_uxxx_2d(uxxx, muscle_names, labels):
     """
@@ -215,7 +243,7 @@ def plot_uxxx_2d(uxxx, muscle_names, labels):
     legend_ax.legend(line_objects, labels, loc='center')
     plt.tight_layout()
     # plt.show()
-    plt.savefig('graphs/UKF2_ctrl.png')  # Save the plot to a file
+    plt.savefig('graphs/UKF2_ctrl_draft.png')  # Save the plot to a file
     plt.close()  # Close the figure to free memory
 def apply_forces(model, data, forces):
     """
@@ -232,7 +260,7 @@ def apply_forces(model, data, forces):
 
     for i, body_id in enumerate(body_ids):
         # Extract the scalar force for the current finger
-        scalar_force = forces[i]
+        scalar_force = forces[i]*10
         # print(scalar_force)
         # Get the rotation matrix from the global frame to the local frame
         body_xmat = data.xmat[body_id].reshape(3, 3)
@@ -242,42 +270,14 @@ def apply_forces(model, data, forces):
         # Apply the local force to the body
         data.xfrc_applied[body_id, :3] = global_force 
 
-def get_joint_anchor_global_position(data, joint_id):
-    """
-    Calcola la posizione globale dell'ancora del giunto.
-
-    Args:
-    data: Oggetto MuJoCo `mjData` contenente lo stato corrente della simulazione.
-    joint_id: ID del giunto per cui si vuole calcolare la posizione dell'ancora.
-
-    Returns:
-    anchor_global: Posizione globale dell'ancora del giunto (array 3D).
-    """
-    # Ottieni l'ID del corpo a cui il giunto è connesso
-    body_id = model.jnt_bodyid[joint_id]
-
-    # Ottieni la posizione del corpo nel sistema globale
-    body_pos_global = data.xpos[body_id]
-
-    # Ottieni la matrice di rotazione del corpo (3x3)
-    body_rot_matrix = data.xmat[body_id].reshape(3, 3)
-
-    # Ottieni la posizione dell'ancora del giunto nelle coordinate locali
-    anchor_local = data.xanchor[joint_id]
-
-    # Trasforma la posizione dell'ancora dal sistema locale al sistema globale
-    anchor_global = body_pos_global + np.dot(body_rot_matrix, anchor_local)
-
-    return anchor_global
-
 ### INIT
 env = gym.make("my_MyoHandEnvForce-v0", frame_skip=1, normalize_act=False)
-tausmooth = 5
-env.unwrapped.sim.model.actuator_dynprm[:,2] = tausmooth
 model = env.sim.model._model
 data = mj.MjData(model) 
+tausmooth = 5
 # TEST
 model_test = env.sim.model._model
+model_test.actuator_dynprm[:,2] = tausmooth
 data_test = mj.MjData(model_test) 
 options_test = mj.MjvOption()
 options_test.flags[:] = 0
@@ -299,10 +299,13 @@ kinematics = pd.read_csv(os.path.join(os.path.dirname(__file__), "trajectories/t
 kinetics = pd.read_csv(os.path.join(os.path.dirname(__file__), "trajectories/traj_force.csv")).values
 kinematics_predicted = np.zeros((kinematics.shape[0], kinematics.shape[1]))
 kinetics_predicted = np.zeros((kinetics.shape[0], kinetics.shape[1]))
+real_time_simulation = np.zeros((kinematics.shape[0],1))
 all_qpos = np.zeros((kinematics.shape[0], kinematics.shape[1], 2))
 all_qpos[:,:,-1] = kinematics
 all_qfrc = np.zeros((kinematics.shape[0], kinematics.shape[1]))
 all_ctrl = np.zeros((kinematics.shape[0], 1+model.nu))
+all_frcs =  np.zeros((kinetics.shape[0], kinetics.shape[1], 2))
+all_frcs[:,:,-1] = kinetics
 # CAMERA
 camera = mj.MjvCamera()
 camera.azimuth = 166.553
@@ -325,46 +328,22 @@ def hx(x):
     return z    
 # UKF 
 nq = model.nq
-dim_x = 2 * nq + 5
-dim_z = nq + 5
+nf = 5
+dim_x = 2 * nq + nf
+dim_z = nq + nf
 points = MerweScaledSigmaPoints(dim_x, alpha=0.1, beta=2., kappa=0)
 ukf = UKF(dim_x=dim_x, dim_z=dim_z, fx=None, hx=None, dt=0.002, points=points)
 ukf.x = np.zeros(dim_x)
 ukf.P *= 0.1
 ukf.Q = np.eye(dim_x) * 0.01
-ukf.R = np.eye(dim_z) * 0.1
+R_pos = np.eye(nq) * 0.1  
+R_force = np.eye(5) * 0.05 
+ukf.R = np.block([
+            [R_pos, np.zeros((nq, 5))],
+            [np.zeros((5, nq)), R_force]
+        ]) 
 ukf.fx = fx
 ukf.hx = hx
-
-
-
-# # Carica la matrice delle traiettorie dal file CSV
-# trajectory_matrix = pd.read_csv('traj_standard.csv').values
-# # Indici dei joint di cui vogliamo salvare le posizioni cartesiane
-# joint_indices = [2, 4, 5, 6, 7, 9, 10, 11, 13, 14, 15, 17, 18, 19, 21, 22]
-# # Numero di istanti di tempo (righe della matrice delle traiettorie)
-# num_timesteps = trajectory_matrix.shape[0]
-# # Matrice per salvare le posizioni cartesiane dei joint
-# cartesian_positions_matrix = np.zeros((num_timesteps, len(joint_indices) * 3))
-# # Itera su ogni istante di tempo per calcolare le posizioni cartesiane dei joint
-# for t in range(num_timesteps):
-#     joint_rotations = trajectory_matrix[t]
-#     # Aggiorna le rotazioni dei joint nel modello
-#     data_ref.qpos[:len(joint_rotations)] = joint_rotations
-#     # Esegui una forward dynamics per aggiornare lo stato del modello
-#     mj.mj_forward(model_ref, data_ref)
-#     # Estrai le posizioni cartesiane dei joint usando la funzione data_ref.site_xpos
-#     cartesian_positions = []
-#     for idx in joint_indices:
-#         position = data_ref.site_xpos[idx]
-#         cartesian_positions.extend(position)  # Aggiungi la posizione cartesiana (x, y, z) alla lista
-#     # Salva le posizioni cartesiane nella matrice
-#     cartesian_positions_matrix[t, :len(cartesian_positions)] = cartesian_positions
-# # La matrice cartesian_positions_matrix ora contiene le posizioni cartesiane dei joint selezionati per ogni istante di tempo
-# # Salva la matrice delle posizioni cartesiane in un file CSV
-# pd.DataFrame(cartesian_positions_matrix).to_csv('cartesian_positions.csv', index=False)
-
-
 
 # LOOP
 obs = env.reset()
@@ -377,11 +356,13 @@ for idx in tqdm(range(kinematics.shape[0])):
 
 
     pos_joints = data.xanchor
-    print(f"{pos_joints}")
+    # print(f"{pos_joints}")
     # time.sleep(10)
     vector_total = []
-    lista = [2, 4, 5, 6, 7, 9, 10, 11, 13, 14, 15, 17, 18, 19, 21, 22]
-    for i in lista:
+    joint_ids = [2, 4, 5, 6,      7, 9, 10,      11, 13, 14,     15, 17, 18,      19, 21, 22]
+    body_ids = [21, 28, 33, 38, 43]
+    lista = [4, 8, 12, 16, 20]
+    for i in joint_ids:
         # ID del corpo corrisponde all'indice nell'array
         joint_id = i
         # usa l'array 'body_names' per ottenere il nome del corpo dall'ID
@@ -393,8 +374,12 @@ for idx in tqdm(range(kinematics.shape[0])):
         # print("Posizione globale dell'ancora del giunto:", anchor_global_position)
         # print(f"Point:{joint_point}")
         vector_total.append(pos_joints[i])    
+    for i, j in enumerate(body_ids):
+        vector_total.insert(lista[i], data_ref.xpos[j])
+        # vector_total.append(data_ref.xpos[i])
+
     vector_total = np.array(vector_total)
-    print(f"{vector_total}")
+    # print(f"{vector_total}")
     actualizar_grafica(vector_total)
 
 
@@ -406,18 +391,20 @@ for idx in tqdm(range(kinematics.shape[0])):
     ukf.predict()
     ukf.update(z)
     x = ukf.x
-    kinematics_predicted[idx,:] = np.hstack((data.time, x[:nq]))
-    kinetics_predicted[idx,:] = np.hstack((data.time, x[2*nq:]))
+    real_time_simulation[idx,:] = data.time
+    kinematics_predicted[idx,:] = np.hstack((kinematics[idx,0], x[:nq]))
+    kinetics_predicted[idx,:] = np.hstack((kinetics[idx,0], x[2*nq:]))
+    all_frcs[idx,:,0] = np.hstack((kinetics[idx,0], x[2*nq:]))
     # Inverse Dynamics
     target_qpos = kinematics_predicted[idx, 1:]
     qfrc = get_qfrc(model_test, data_test, target_qpos)
-    all_qpos[idx,:,0] = np.hstack((data_test.time, data_test.qpos))
-    all_qfrc[idx,:] = np.hstack((data_test.time, qfrc))
+    all_qpos[idx,:,0] = np.hstack((kinematics_predicted[idx, 0], data_test.qpos))
+    all_qfrc[idx,:] = np.hstack((kinematics_predicted[idx, 0], qfrc))
     # Quadratic Problem
     ctrl = get_ctrl(model_test, data_test, target_qpos, qfrc, 100, 5)
     data_test.ctrl = ctrl
     mj.mj_step(model_test, data_test)
-    all_ctrl[idx,:] = np.hstack((data_test.time, ctrl))
+    all_ctrl[idx,:] = np.hstack((kinematics_predicted[idx, 0], ctrl))
     # Rendering
     if not idx % round(0.3/(model_test.opt.timestep*25)):
         renderer_ref.update_scene(data_ref, camera=camera, scene_option=options_ref)
@@ -432,15 +419,19 @@ error_deg = (180*error_rad)/np.pi
 print(f'error max (rad): {error_rad.max()}')
 print(f'error max (deg): {error_deg.max()}')
 joint_names = [model.joint(i).name for i in range(model.nq)]
-plot_qxxx(all_qpos, joint_names, ['Achieved qpos', 'Reference qpos'])
-plot_qxxx_2d(all_qfrc, joint_names, ['Achieved qfrc'])
+plot_qxxx(all_qpos, joint_names, ['Predicted qpos', 'Reference qpos'])
+plot_qxxx_2d(all_qfrc, joint_names, ['Predicted qfrc'])
 muscle_names = [model_test.actuator(i).name for i in range(model_test.nu)]
-plot_uxxx_2d(all_ctrl, muscle_names, ['Achieved ctrl'])
+plot_uxxx_2d(all_ctrl, muscle_names, ['Predicted ctrl'])
+fingertips_names = ['Thumb Fingertip', 'Index Fingertip', 'Middle Fingertip', 'Ring Fingertip', 'Little Fingertip']
+plot_fxxx(all_frcs, fingertips_names, ['Predicted force', 'Reference force'])
 
 # SAVE
-output_name = os.path.join(os.path.dirname(__file__), "videos/ukf2.mp4")
+output_name = os.path.join(os.path.dirname(__file__), "videos/ukf2_draft.mp4")
 skvideo.io.vwrite(output_name, np.asarray(frames),outputdict={"-pix_fmt": "yuv420p"})
-output_path = os.path.join(os.path.dirname(__file__), "trajectories/simulation/kinematics_predicted_ukf2.csv")
+output_path = os.path.join(os.path.dirname(__file__), "trajectories/simulation/kinematics_predicted_ukf2_draft.csv")
 pd.DataFrame(kinematics_predicted).to_csv(output_path, index=False, header=False)
-output_path = os.path.join(os.path.dirname(__file__), "trajectories/simulation/kinetics_predicted_ukf2.csv")
+output_path = os.path.join(os.path.dirname(__file__), "trajectories/simulation/kinetics_predicted_ukf2_draft.csv")
 pd.DataFrame(kinetics_predicted).to_csv(output_path, index=False, header=False)
+output_path = os.path.join(os.path.dirname(__file__), "trajectories/simulation/time_simulation_ukf2_draft.csv")
+pd.DataFrame(real_time_simulation).to_csv(output_path, index=False, header=False)
