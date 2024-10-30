@@ -1,9 +1,7 @@
 import myosuite
 import mujoco as mj
-import mujoco.viewer as viewer
 import gym
 import time 
-from myosuite.simhive.myo_sim.test_sims import TestSims as loader
 from mujoco.glfw import glfw
 import matplotlib.pyplot as plt
 import scipy.sparse as spa
@@ -70,6 +68,34 @@ def plot_qxxx(qxxx, joint_names, labels):
     plt.tight_layout()
     # plt.show()
     plt.savefig('graphs/UKF2nf_qpos.png')  # Save the plot to a file
+    plt.close()  # Close the figure to free memory
+def plot_fxxx(fxxx, fingertips_names, labels):
+    """
+    Plot generalized variables to be compared.
+    fxxx[:,0,-1] = time axis
+    fxxx[:,1:,n] = n-th sequence
+    fxxx[:,1:,-1] = reference sequence
+    """
+    fig, axs = plt.subplots(2, 3, figsize=(12, 8))
+    axs = axs.flatten()
+    line_objects = []
+    linestyle = ['-'] * fxxx.shape[2]
+    linestyle[-1] = '--'
+    for j in range(1, len(fingertips_names)+1):
+        ax = axs[j-1]
+        for i in range(fxxx.shape[2]):
+            line, = ax.plot(fxxx[:, 0, -1], fxxx[:, j, i], linestyle[i])
+            if j == 1: # add only one set of lines to the legend
+                line_objects.append(line)
+        ax.set_xlim([fxxx[:, 0].min(), fxxx[:, 0].max()])
+        ax.set_ylim([fxxx[:, 1:, :].min(), fxxx[:, 1:, :].max()])
+        ax.set_title(fingertips_names[j-1])
+    legend_ax = axs[len(fingertips_names)] # create legend in the 24th subplot area
+    legend_ax.axis('off')
+    legend_ax.legend(line_objects, labels, loc='center')
+    plt.tight_layout()
+    # plt.show()
+    plt.savefig('graphs/UKF2nf_frcs.png')  # Save the plot to a file
     plt.close()  # Close the figure to free memory
 def get_qfrc(model, data, target_qpos):
     """
@@ -196,12 +222,12 @@ def apply_forces(model, data, forces):
 
 ### INIT
 env = gym.make("my_MyoHandEnvForce-v0", frame_skip=1, normalize_act=False)
-tausmooth = 5
-env.unwrapped.sim.model.actuator_dynprm[:,2] = tausmooth
 model = env.sim.model._model
 data = mj.MjData(model) 
+tausmooth = 5
 # TEST
 model_test = env.sim.model._model
+model_test.actuator_dynprm[:,2] = tausmooth
 data_test = mj.MjData(model_test) 
 options_test = mj.MjvOption()
 options_test.flags[:] = 0
@@ -223,10 +249,13 @@ kinematics = pd.read_csv(os.path.join(os.path.dirname(__file__), "trajectories/t
 kinetics = pd.read_csv(os.path.join(os.path.dirname(__file__), "trajectories/traj_force.csv")).values
 kinematics_predicted = np.zeros((kinematics.shape[0], kinematics.shape[1]))
 kinetics_predicted = np.zeros((kinetics.shape[0], kinetics.shape[1]))
+real_time_simulation = np.zeros((kinematics.shape[0],1))
 all_qpos = np.zeros((kinematics.shape[0], kinematics.shape[1], 2))
 all_qpos[:,:,-1] = kinematics
 all_qfrc = np.zeros((kinematics.shape[0], kinematics.shape[1]))
 all_ctrl = np.zeros((kinematics.shape[0], 1+model.nu))
+all_frcs =  np.zeros((kinetics.shape[0], kinetics.shape[1], 2))
+all_frcs[:,:,-1] = kinetics
 # CAMERA
 camera = mj.MjvCamera()
 camera.azimuth = 166.553
@@ -249,8 +278,9 @@ def hx(x):
     return z    
 # UKF 
 nq = model.nq
-dim_x = 2 * nq + 5
-dim_z = nq + 5
+nf = 5
+dim_x = 2 * nq + nf
+dim_z = nq + nf
 points = MerweScaledSigmaPoints(dim_x, alpha=0.1, beta=2., kappa=0)
 ukf = UKF(dim_x=dim_x, dim_z=dim_z, fx=None, hx=None, dt=0.002, points=points)
 ukf.x = np.zeros(dim_x)
@@ -279,18 +309,20 @@ for idx in tqdm(range(kinematics.shape[0])):
     ukf.predict()
     ukf.update(z)
     x = ukf.x
-    kinematics_predicted[idx,:] = np.hstack((data.time, x[:nq]))
-    kinetics_predicted[idx,:] = np.hstack((data.time, x[2*nq:]))
+    real_time_simulation[idx,:] = data.time
+    kinematics_predicted[idx,:] = np.hstack((kinematics[idx,0], x[:nq]))
+    kinetics_predicted[idx,:] = np.hstack((kinetics[idx,0], x[2*nq:]))
+    all_frcs[idx,:,0] = np.hstack((kinetics[idx,0], x[2*nq:]))
     # Inverse Dynamics
     target_qpos = kinematics_predicted[idx, 1:]
     qfrc = get_qfrc(model_test, data_test, target_qpos)
-    all_qpos[idx,:,0] = np.hstack((data_test.time, data_test.qpos))
-    all_qfrc[idx,:] = np.hstack((data_test.time, qfrc))
+    all_qpos[idx,:,0] = np.hstack((kinematics_predicted[idx, 0], data_test.qpos))
+    all_qfrc[idx,:] = np.hstack((kinematics_predicted[idx, 0], qfrc))
     # Quadratic Problem
     ctrl = get_ctrl(model_test, data_test, target_qpos, qfrc, 100, 5)
     data_test.ctrl = ctrl
     mj.mj_step(model_test, data_test)
-    all_ctrl[idx,:] = np.hstack((data_test.time, ctrl))
+    all_ctrl[idx,:] = np.hstack((kinematics_predicted[idx, 0], ctrl))
     # Rendering
     if not idx % round(0.3/(model_test.opt.timestep*25)):
         renderer_ref.update_scene(data_ref, camera=camera, scene_option=options_ref)
@@ -300,13 +332,17 @@ for idx in tqdm(range(kinematics.shape[0])):
         frame_merged = np.append(frame_ref, frame, axis=1)
         frames.append(frame_merged)
 
-error = ((all_qpos[:,1:,0] - all_qpos[:,1:,-1])**2).mean(axis=0)
-print(f'error max (rad): {error.max()}')
+error_rad = np.sqrt(((all_qpos[:,1:,0] - all_qpos[:,1:,-1])**2)).mean(axis=0)
+error_deg = (180*error_rad)/np.pi
+print(f'error max (rad): {error_rad.max()}')
+print(f'error max (deg): {error_deg.max()}')
 joint_names = [model.joint(i).name for i in range(model.nq)]
 plot_qxxx(all_qpos, joint_names, ['Achieved qpos', 'Reference qpos'])
 plot_qxxx_2d(all_qfrc, joint_names, ['Achieved qfrc'])
 muscle_names = [model_test.actuator(i).name for i in range(model_test.nu)]
 plot_uxxx_2d(all_ctrl, muscle_names, ['Achieved ctrl'])
+fingertips_names = ['Thumb Fingertip', 'Index Fingertip', 'Middle Fingertip', 'Ring Fingertip', 'Little Fingertip']
+plot_fxxx(all_frcs, fingertips_names, ['Predicted force', 'Reference force'])
 
 # SAVE
 output_name = os.path.join(os.path.dirname(__file__), "videos/ukf2nf.mp4")
@@ -315,3 +351,5 @@ output_path = os.path.join(os.path.dirname(__file__), "trajectories/simulation/k
 pd.DataFrame(kinematics_predicted).to_csv(output_path, index=False, header=False)
 output_path = os.path.join(os.path.dirname(__file__), "trajectories/simulation/kinetics_predicted_ukf2nf.csv")
 pd.DataFrame(kinetics_predicted).to_csv(output_path, index=False, header=False)
+output_path = os.path.join(os.path.dirname(__file__), "trajectories/simulation/time_simulation_ukf2nf.csv")
+pd.DataFrame(real_time_simulation).to_csv(output_path, index=False, header=False)

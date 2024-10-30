@@ -225,6 +225,8 @@ all_qpos = np.zeros((kinematics.shape[0], kinematics.shape[1], 2))
 all_qpos[:,:,-1] = kinematics
 all_qfrc = np.zeros((kinematics.shape[0], kinematics.shape[1]))
 all_ctrl = np.zeros((kinematics.shape[0], 1+model.nu))
+all_frcs =  np.zeros((kinetics.shape[0], kinetics.shape[1], 2))
+all_frcs[:,:,-1] = kinetics
 # CAMERA
 camera = mj.MjvCamera()
 camera.azimuth = 166.553
@@ -236,7 +238,7 @@ def fx(x, dt):
     data.qpos[:] = x[:nq]
     data.qvel[:] = x[nq:]
     mj.mj_step(model, data)
-    x_new = np.concatenate((data.qpos, data.qvel))
+    x_new = np.concatenate((data.qpos, data.qvel))  
     return x_new
 def hx(x):
     z_pos = x[:nq]
@@ -258,8 +260,6 @@ ukf.hx = hx
 obs = env.reset()
 frames = []
 for idx in tqdm(range(kinematics.shape[0])):
-    if idx < 4 | idx > 4747:
-        print(x)
     # Reference 
     data_ref.qpos = kinematics[idx, 1:]
     mj.mj_step1(model_ref, data_ref)
@@ -269,17 +269,20 @@ for idx in tqdm(range(kinematics.shape[0])):
     ukf.predict()
     ukf.update(z)
     x = ukf.x
-    kinematics_predicted[idx,:] = np.hstack((data.time, x[:nq]))
+    real_time_simulation[idx,:] = data.time
+    kinematics_predicted[idx,:] = np.hstack((kinematics[idx,0], x[:nq]))
+    all_frcs[idx,:,0] = np.hstack((kinetics[idx,0], x[2*nq:]))
     # Inverse Dynamics
     target_qpos = kinematics_predicted[idx, 1:]
     qfrc = get_qfrc(model_test, data_test, target_qpos)
-    all_qpos[idx,:,0] = np.hstack((data_test.time, data_test.qpos))
-    all_qfrc[idx,:] = np.hstack((data_test.time, qfrc))
+    all_qpos[idx,:,0] = np.hstack((kinematics_predicted[idx, 0], data_test.qpos))
+    all_qfrc[idx,:] = np.hstack((kinematics_predicted[idx, 0], qfrc))
     # Quadratic Problem
     ctrl = get_ctrl(model_test, data_test, target_qpos, qfrc, 100, 5)
     data_test.ctrl = ctrl
     mj.mj_step(model_test, data_test)
     all_ctrl[idx,:] = np.hstack((data_test.time, ctrl))
+    all_ctrl[idx,:] = np.hstack((kinematics_predicted[idx, 0], ctrl))
     # Rendering
     if not idx % round(0.3/(model_test.opt.timestep*25)):
         renderer_ref.update_scene(data_ref, camera=camera, scene_option=options_ref)
@@ -289,8 +292,10 @@ for idx in tqdm(range(kinematics.shape[0])):
         frame_merged = np.append(frame_ref, frame, axis=1)
         frames.append(frame_merged)
 
-error = ((all_qpos[:,1:,0] - all_qpos[:,1:,-1])**2).mean(axis=0)
-print(f'error max (rad): {error.max()}')
+error_rad = np.sqrt(((all_qpos[:,1:,0] - all_qpos[:,1:,-1])**2)).mean(axis=0)
+error_deg = (180*error_rad)/np.pi
+print(f'error max (rad): {error_rad.max()}')
+print(f'error max (deg): {error_deg.max()}')
 joint_names = [model.joint(i).name for i in range(model.nq)]
 plot_qxxx(all_qpos, joint_names, ['Achieved qpos', 'Reference qpos'])
 plot_qxxx_2d(all_qfrc, joint_names, ['Achieved qfrc'])
@@ -302,3 +307,5 @@ output_name = os.path.join(os.path.dirname(__file__), "videos/ukf1f.mp4")
 skvideo.io.vwrite(output_name, np.asarray(frames),outputdict={"-pix_fmt": "yuv420p"})
 output_path = os.path.join(os.path.dirname(__file__), "trajectories/simulation/kinematics_predicted_ukf1f.csv")
 pd.DataFrame(kinematics_predicted).to_csv(output_path, index=False, header=False)
+output_path = os.path.join(os.path.dirname(__file__), "trajectories/simulation/time_simulation_ukf1f.csv")
+pd.DataFrame(real_time_simulation).to_csv(output_path, index=False, header=False)

@@ -399,7 +399,7 @@ class UnscentedKalmanFilter(object):
         # calculate sigma points for given mean and covariance
         self.compute_process_sigmas(dt, fx, **fx_args)
 
-        #and pass sigmas through the unscented transform to compute prior
+        # and pass sigmas through the unscented transform to compute prior
         self.x, self.P = UT(self.sigmas_f, self.Wm, self.Wc, self.Q,
                             self.x_mean, self.residual_x)
 

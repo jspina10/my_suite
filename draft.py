@@ -1,10 +1,9 @@
 import myosuite
 import mujoco as mj
-import mujoco.viewer as viewer
 import gym
 import time 
-from myosuite.simhive.myo_sim.test_sims import TestSims as loader
 from mujoco.glfw import glfw
+from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
 import scipy.sparse as spa
 import pandas as pd
@@ -22,10 +21,6 @@ sys.path.append(os.getcwd())
 from _myosuite.envs.myo import myobase
 from filterpy.kalman import UnscentedKalmanFilter as UKF
 from filterpy.kalman import MerweScaledSigmaPoints
-
-import numpy as np
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
 
 # Inicialización de la figura global
 plt.ion()  # Activar el modo interactivo de Matplotlib para actualizar la gráfica.
