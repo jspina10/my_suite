@@ -22,8 +22,7 @@ from _myosuite.envs.myo import myobase
 from filterpy.kalman import UnscentedKalmanFilter as UKF
 from filterpy.kalman import MerweScaledSigmaPoints
 
-# Inicialización de la figura global
-plt.ion()  # Activar el modo interactivo de Matplotlib para actualizar la gráfica.
+plt.ion()
 fig_2 = plt.figure()
 ax_2 = fig_2.add_subplot(111, projection='3d')
 
@@ -287,18 +286,24 @@ options_ref.geomgroup[1:] = 0
 renderer_ref = mj.Renderer(model_ref)
 renderer_ref.scene.flags[:] = 0
 # DATA
+nq = model_test.nq
+nu = model_test.nu
+nf = 5
+nk = 21
+dim_x = 2 * nq + nf
+dim_z = nq + nf
 kinematics = pd.read_csv(os.path.join(os.path.dirname(__file__), "trajectories/traj_standard.csv")).values
-kinematics_keypoints = np.zeros((kinematics.shape[0], 1+3*21))
+kinematics_keypoints = np.zeros((kinematics.shape[0], 1+3*nk))
 kinematics_keypoints[:,0] = kinematics[:,0]
 kinetics = pd.read_csv(os.path.join(os.path.dirname(__file__), "trajectories/traj_force.csv")).values
-kinematics_predicted = np.zeros((kinematics.shape[0], kinematics.shape[1]))
-kinetics_predicted = np.zeros((kinetics.shape[0], kinetics.shape[1]))
+kinematics_predicted = np.zeros((kinematics.shape[0], 1+nq))
+kinetics_predicted = np.zeros((kinetics.shape[0], 1+nf))
 real_time_simulation = np.zeros((kinematics.shape[0],1))
-all_qpos = np.zeros((kinematics.shape[0], kinematics.shape[1], 2))
+all_qpos = np.zeros((kinematics.shape[0], 1+nq, 2))
 all_qpos[:,:,-1] = kinematics
-all_qfrc = np.zeros((kinematics.shape[0], kinematics.shape[1]))
-all_ctrl = np.zeros((kinematics.shape[0], 1+model.nu))
-all_frcs =  np.zeros((kinetics.shape[0], kinetics.shape[1], 2))
+all_qfrc = np.zeros((kinematics.shape[0], 1+nq))
+all_ctrl = np.zeros((kinematics.shape[0], 1+nu))
+all_frcs =  np.zeros((kinetics.shape[0], 1+nf, 2))
 all_frcs[:,:,-1] = kinetics
 # CAMERA
 camera = mj.MjvCamera()
@@ -308,17 +313,6 @@ camera.elevation = -36.793
 camera.lookat = np.array([-0.93762553, -0.34088276, 0.85067529])
 # FUNTIONS
 def fx(x, dt):
-    """
-    Transition Function:
-    It applies the forces to the fingerprints and computes system dynamics.
-
-    Args:
-    x: Augmented state vector [includes the state vector (positions, velocities) and the forces predicted].
-    dt: Time step.
-
-    Returns:
-    x_new: New augmented state vector after prediction.
-    """
     data.qpos[:] = x[:nq]
     data.qvel[:] = x[nq:2*nq]
     forces = x[2*nq:]
@@ -331,54 +325,17 @@ def hx(x):
     z_force = x[2*nq:]
     z = np.concatenate((z_pos, z_force))
     return z    
-# def hx(x):
-#     """
-#     Observation function:
-#     Maps the augmented state into the observating measurements.
-#     Includes the cartesian positions of the keypoints detected and the measured forces at the fingerprints.
-    
-#     Args:
-#     x: Augmented state vector [includes the state vector (positions, velocities) and the forces predicted].
-
-#     Returns:
-#     z: Measurements vector [includes the keypoints cartesian position and the measured forces].
-#     """
-#     # Extract the joints position
-#     qpos = x[:nq]
-#     # Update model with the current state
-#     data.qpos[:] = qpos
-#     mj.mj_forward(model, data)
-#     # Compute keypoints positions
-#     joint_ids = [2, 4, 5, 6, 7, 9, 10, 11, 13, 14, 15, 17, 18, 19, 21, 22]
-#     body_ids = [21, 28, 33, 38, 43]
-#     lista = [4, 8, 12, 16, 20]
-#     pos_joints = data.xanchor
-#     vector_total = []
-#     for i in joint_ids:
-#         vector_total.append(pos_joints[i])
-#     for i, j in enumerate(body_ids):
-#         vector_total.insert(lista[i], data.xpos[j])
-#     keypoints_flat = np.array(vector_total).flatten()
-#     # Extract forces at fingerprints
-#     z_force = x[2 * nq:]  # Forze predette ai polpastrelli
-#     # Combine keypoints positions and forces
-#     z = np.concatenate((keypoints_flat, z_force))
-#     return z
 # UKF 
-nq = model.nq
-nf = 5
-dim_x = 2 * nq + nf
-dim_z = nq + nf
-points = MerweScaledSigmaPoints(dim_x, alpha=0.1, beta=2., kappa=0)
+points = MerweScaledSigmaPoints(dim_x, alpha=1, beta=2., kappa=0)
 ukf = UKF(dim_x=dim_x, dim_z=dim_z, fx=None, hx=None, dt=0.002, points=points)
 ukf.x = np.zeros(dim_x)
 ukf.P *= 0.1
 ukf.Q = np.eye(dim_x) * 0.01
-R_pos = np.eye(nq) * 0.1  
-R_force = np.eye(5) * 0.05 
+R_pos = np.eye(dim_z-nf) * 0.1  
+R_force = np.eye(nf) * 0.05 
 ukf.R = np.block([
-            [R_pos, np.zeros((nq, 5))],
-            [np.zeros((5, nq)), R_force]
+            [R_pos, np.zeros((dim_z-nf, nf))],
+            [np.zeros((nf, dim_z-nf)), R_force]
         ]) 
 ukf.fx = fx
 ukf.hx = hx
@@ -393,22 +350,22 @@ for idx in tqdm(range(kinematics.shape[0])):
 
 
 
-    pos_joints = data.xanchor
-    vector_total = []
-    joint_ids = [2, 4, 5, 6, 7, 9, 10, 11, 13, 14, 15, 17, 18, 19, 21, 22]
-    body_ids = [21, 28, 33, 38, 43]
-    lista = [4, 8, 12, 16, 20]
-    for i in joint_ids:
-        joint_id = i
-        joint_name_offset = model.name_jntadr[joint_id]
-        joint_name = mj.mj_id2name(model, mj.mjtObj.mjOBJ_JOINT, joint_id)
-        vector_total.append(pos_joints[i])    
-    for i, j in enumerate(body_ids):
-        vector_total.insert(lista[i], data_ref.xpos[j])
-    vector_total = np.array(vector_total)
-    actualizar_grafica(vector_total)
-    keypoints_flat = np.array(vector_total).flatten()
-    kinematics_keypoints[idx,1:] = keypoints_flat
+    # pos_joints = data.xanchor
+    # vector_total = []
+    # joint_ids = [2, 4, 5, 6, 7, 9, 10, 11, 13, 14, 15, 17, 18, 19, 21, 22]
+    # body_ids = [21, 28, 33, 38, 43]
+    # lista = [4, 8, 12, 16, 20]
+    # for i in joint_ids:
+    #     joint_id = i
+    #     joint_name_offset = model.name_jntadr[joint_id]
+    #     joint_name = mj.mj_id2name(model, mj.mjtObj.mjOBJ_JOINT, joint_id)
+    #     vector_total.append(pos_joints[i])    
+    # for i, j in enumerate(body_ids):
+    #     vector_total.insert(lista[i], data_ref.xpos[j])
+    # vector_total = np.array(vector_total)
+    # actualizar_grafica(vector_total)
+    # keypoints_flat = np.array(vector_total).flatten()
+    # kinematics_keypoints[idx,1:] = keypoints_flat
 
 
     # Prediction UKF
@@ -418,6 +375,7 @@ for idx in tqdm(range(kinematics.shape[0])):
     ukf.predict()
     ukf.update(z)
     x = ukf.x
+    
     real_time_simulation[idx,:] = data.time
     kinematics_predicted[idx,:] = np.hstack((kinematics[idx,0], x[:nq]))
     kinetics_predicted[idx,:] = np.hstack((kinetics[idx,0], x[2*nq:]))
@@ -445,10 +403,10 @@ error_rad = np.sqrt(((all_qpos[:,1:,0] - all_qpos[:,1:,-1])**2)).mean(axis=0)
 error_deg = (180*error_rad)/np.pi
 print(f'error max (rad): {error_rad.max()}')
 print(f'error max (deg): {error_deg.max()}')
-joint_names = [model.joint(i).name for i in range(model.nq)]
+joint_names = [model.joint(i).name for i in range(nq)]
 plot_qxxx(all_qpos, joint_names, ['Predicted qpos', 'Reference qpos'])
 plot_qxxx_2d(all_qfrc, joint_names, ['Predicted qfrc'])
-muscle_names = [model_test.actuator(i).name for i in range(model_test.nu)]
+muscle_names = [model_test.actuator(i).name for i in range(nu)]
 plot_uxxx_2d(all_ctrl, muscle_names, ['Predicted ctrl'])
 fingertips_names = ['Thumb Fingertip', 'Index Fingertip', 'Middle Fingertip', 'Ring Fingertip', 'Little Fingertip']
 plot_fxxx(all_frcs, fingertips_names, ['Predicted force', 'Reference force'])
