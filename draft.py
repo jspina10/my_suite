@@ -27,50 +27,6 @@ plt.ion()  # Activar el modo interactivo de Matplotlib para actualizar la gráfi
 fig_2 = plt.figure()
 ax_2 = fig_2.add_subplot(111, projection='3d')
 
-def actualizar_grafica(arr):
-    # Limpiar el gráfico actual para evitar superposiciones.
-    ax_2.clear()
-    # Asegurarse de que el arreglo sea de tipo numpy.ndarray.
-    if not isinstance(arr, np.ndarray):
-        print("El parámetro debe ser de tipo numpy.ndarray")
-        return
-    # Comprobar que el arreglo tenga 3 columnas (coordenadas x, y, z).
-    if arr.shape[1] != 3:
-        print("El arreglo debe tener exactamente 3 columnas para representar coordenadas 3D.")
-        return
-    # Extraer las coordenadas x, y, z.
-    x = arr[:, 0]
-    y = arr[:, 1]
-    z = arr[:, 2]
-    # # Dibujar los puntos en el espacio 3D.
-    # ax_2.scatter(x, y, z, color='blue', marker='o', s=20)  # 's' define el tamaño de los puntos.
-    # for i in range(len(x)):
-    #     ax_2.text(x[i], y[i], z[i], f'{i}', color='red', fontsize=10)
-    # Restar las coordenadas del primer punto para obtener posiciones relativas.
-    x_rel = x - x[0]
-    y_rel = y - y[0]
-    z_rel = z - z[0]
-    # Dibujar los puntos en el espacio 3D.
-    ax_2.scatter(x_rel, y_rel, z_rel, color='blue', marker='o', s=20)  # 's' define el tamaño de los puntos.
-    # Añadir los índices de los puntos.
-    for i in range(len(x_rel)):
-        ax_2.text(x_rel[i], y_rel[i], z_rel[i], f'{i}', color='red', fontsize=10)
-    # Configurar etiquetas y título.
-    ax_2.set_title('Gráfica de puntos en 3D')
-    ax_2.set_xlabel('Eje X')
-    ax_2.set_ylabel('Eje Y')
-    ax_2.set_zlabel('Eje Z')
-    # Configurar los límites de los ejes para una mejor visualización.
-    ax_2.set_xlim([x_rel.min() - 0.1, x_rel.max() + 0.1])
-    ax_2.set_ylim([y_rel.min() - 0.1, y_rel.max() + 0.1])
-    ax_2.set_zlim([z_rel.min() - 0.1, z_rel.max() + 0.1])
-    # ax_2.set_xlim([-10, 10])
-    # ax_2.set_ylim([-10, 10])
-    # ax_2.set_zlim([-10, 10])
-    # Actualizar la visualización.
-    plt.draw()
-    plt.pause(0.0001)  # Pausar brevemente para permitir la actualización de la gráfica.
-
 ### RUNNARE CON PYTHON3 !!!
 
 def show_video(video_path, video_width = 400):
@@ -269,6 +225,42 @@ def apply_forces(model, data, forces):
         global_force =  body_xmat @ external_force_local
         # Apply the local force to the body
         data.xfrc_applied[body_id, :3] = global_force 
+def actualizar_grafica(arr):
+    # Clear the actual graph to avoid superpositions.
+    ax_2.clear()
+    # Be sure the array is numpy.ndarray.
+    if not isinstance(arr, np.ndarray):
+        print("The parameter must be numpy.ndarray")
+        return
+    # Check that the array has 3 coloumns [x, y, z].
+    if arr.shape[1] != 3:
+        print("The array must have exactly 3 coloumns.")
+        return
+    # Extract coordinates.
+    x = arr[:, 0]
+    y = arr[:, 1]
+    z = arr[:, 2]
+    # Save the first point coordinates to compute the relative position.
+    x_rel = x - x[0]
+    y_rel = y - y[0]
+    z_rel = z - z[0]
+    # Sketch the points in the 3D space.
+    ax_2.scatter(x_rel, y_rel, z_rel, color='blue', marker='o', s=20)  # 's' define the size of the p
+    # Add the indeces to the respective points.
+    for i in range(len(x_rel)):
+        ax_2.text(x_rel[i], y_rel[i], z_rel[i], f'{i}', color='red', fontsize=10)
+    # Configurate the plot.
+    ax_2.set_title('3D plot of the keypoints')
+    ax_2.set_xlabel('Axis X')
+    ax_2.set_ylabel('Axis Y')
+    ax_2.set_zlabel('Axis Z')
+    # Configurate the limits of the axes to better visualize.
+    ax_2.set_xlim([x_rel.min() - 0.1, x_rel.max() + 0.1])
+    ax_2.set_ylim([y_rel.min() - 0.1, y_rel.max() + 0.1])
+    ax_2.set_zlim([z_rel.min() - 0.1, z_rel.max() + 0.1])
+    # Update the visualization.
+    plt.draw()
+    plt.pause(0.0001)  # Break to permit the plot update.
 
 ### INIT
 env = gym.make("my_MyoHandEnvForce-v0", frame_skip=1, normalize_act=False)
@@ -296,6 +288,8 @@ renderer_ref = mj.Renderer(model_ref)
 renderer_ref.scene.flags[:] = 0
 # DATA
 kinematics = pd.read_csv(os.path.join(os.path.dirname(__file__), "trajectories/traj_standard.csv")).values
+kinematics_keypoints = np.zeros((kinematics.shape[0], 1+3*21))
+kinematics_keypoints[:,0] = kinematics[:,0]
 kinetics = pd.read_csv(os.path.join(os.path.dirname(__file__), "trajectories/traj_force.csv")).values
 kinematics_predicted = np.zeros((kinematics.shape[0], kinematics.shape[1]))
 kinetics_predicted = np.zeros((kinetics.shape[0], kinetics.shape[1]))
@@ -314,6 +308,17 @@ camera.elevation = -36.793
 camera.lookat = np.array([-0.93762553, -0.34088276, 0.85067529])
 # FUNTIONS
 def fx(x, dt):
+    """
+    Transition Function:
+    It applies the forces to the fingerprints and computes system dynamics.
+
+    Args:
+    x: Augmented state vector [includes the state vector (positions, velocities) and the forces predicted].
+    dt: Time step.
+
+    Returns:
+    x_new: New augmented state vector after prediction.
+    """
     data.qpos[:] = x[:nq]
     data.qvel[:] = x[nq:2*nq]
     forces = x[2*nq:]
@@ -326,6 +331,39 @@ def hx(x):
     z_force = x[2*nq:]
     z = np.concatenate((z_pos, z_force))
     return z    
+# def hx(x):
+#     """
+#     Observation function:
+#     Maps the augmented state into the observating measurements.
+#     Includes the cartesian positions of the keypoints detected and the measured forces at the fingerprints.
+    
+#     Args:
+#     x: Augmented state vector [includes the state vector (positions, velocities) and the forces predicted].
+
+#     Returns:
+#     z: Measurements vector [includes the keypoints cartesian position and the measured forces].
+#     """
+#     # Extract the joints position
+#     qpos = x[:nq]
+#     # Update model with the current state
+#     data.qpos[:] = qpos
+#     mj.mj_forward(model, data)
+#     # Compute keypoints positions
+#     joint_ids = [2, 4, 5, 6, 7, 9, 10, 11, 13, 14, 15, 17, 18, 19, 21, 22]
+#     body_ids = [21, 28, 33, 38, 43]
+#     lista = [4, 8, 12, 16, 20]
+#     pos_joints = data.xanchor
+#     vector_total = []
+#     for i in joint_ids:
+#         vector_total.append(pos_joints[i])
+#     for i, j in enumerate(body_ids):
+#         vector_total.insert(lista[i], data.xpos[j])
+#     keypoints_flat = np.array(vector_total).flatten()
+#     # Extract forces at fingerprints
+#     z_force = x[2 * nq:]  # Forze predette ai polpastrelli
+#     # Combine keypoints positions and forces
+#     z = np.concatenate((keypoints_flat, z_force))
+#     return z
 # UKF 
 nq = model.nq
 nf = 5
@@ -356,32 +394,21 @@ for idx in tqdm(range(kinematics.shape[0])):
 
 
     pos_joints = data.xanchor
-    # print(f"{pos_joints}")
-    # time.sleep(10)
     vector_total = []
-    joint_ids = [2, 4, 5, 6,      7, 9, 10,      11, 13, 14,     15, 17, 18,      19, 21, 22]
+    joint_ids = [2, 4, 5, 6, 7, 9, 10, 11, 13, 14, 15, 17, 18, 19, 21, 22]
     body_ids = [21, 28, 33, 38, 43]
     lista = [4, 8, 12, 16, 20]
     for i in joint_ids:
-        # ID del corpo corrisponde all'indice nell'array
         joint_id = i
-        # usa l'array 'body_names' per ottenere il nome del corpo dall'ID
         joint_name_offset = model.name_jntadr[joint_id]
         joint_name = mj.mj_id2name(model, mj.mjtObj.mjOBJ_JOINT, joint_id)
-        # joint_point = data.xanchor
-        # print(f"Joint: {joint_name}, ID: {joint_id}")
-        # anchor_global_position = get_joint_anchor_global_position(data, joint_id)
-        # print("Posizione globale dell'ancora del giunto:", anchor_global_position)
-        # print(f"Point:{joint_point}")
         vector_total.append(pos_joints[i])    
     for i, j in enumerate(body_ids):
         vector_total.insert(lista[i], data_ref.xpos[j])
-        # vector_total.append(data_ref.xpos[i])
-
     vector_total = np.array(vector_total)
-    # print(f"{vector_total}")
     actualizar_grafica(vector_total)
-
+    keypoints_flat = np.array(vector_total).flatten()
+    kinematics_keypoints[idx,1:] = keypoints_flat
 
 
     # Prediction UKF
@@ -435,3 +462,5 @@ output_path = os.path.join(os.path.dirname(__file__), "trajectories/simulation/k
 pd.DataFrame(kinetics_predicted).to_csv(output_path, index=False, header=False)
 output_path = os.path.join(os.path.dirname(__file__), "trajectories/simulation/time_simulation_ukf2_draft.csv")
 pd.DataFrame(real_time_simulation).to_csv(output_path, index=False, header=False)
+output_path = os.path.join(os.path.dirname(__file__), "trajectories/simulation/kinematics_keypoints.csv")
+pd.DataFrame(kinematics_keypoints).to_csv(output_path, index=False, header=False)
