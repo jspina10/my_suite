@@ -21,6 +21,8 @@ sys.path.append(os.getcwd())
 from _myosuite.envs.myo import myobase
 from filterpy.kalman import UnscentedKalmanFilter as UKF
 from filterpy.kalman import MerweScaledSigmaPoints
+from filterpy.kalman import SimplexSigmaPoints
+from filterpy.kalman import JulierSigmaPoints
 
 # Inicialización de la figura global
 plt.ion()  # Activar el modo interactivo de Matplotlib para actualizar la gráfica.
@@ -291,9 +293,6 @@ nq = model_test.nq
 nu = model_test.nu
 nf = 5
 nk = 21
-dim_x = 2 * nq + nf
-# dim_z = nq + nf
-dim_z = 3 * nk + nf
 # kinematics_keypoints = np.zeros((kinematics.shape[0], 1+3*21))
 # kinematics_keypoints[:,0] = kinematics[:,0]
 kinematics_qpos = pd.read_csv(os.path.join(os.path.dirname(__file__), "trajectories/traj_standard.csv")).values
@@ -346,11 +345,13 @@ def hx(x):
     Returns:
     z: Measurements vector [includes the keypoints cartesian position and the measured forces].
     """
+    data.qpos[:] = x[:nq]
+    data.qvel[:] = x[nq:2*nq]
     # # Extract the joints position
     # qpos = x[:nq]
     # # Update model with the current state
     # data.qpos[:] = qpos
-    # mj.mj_forward(model_2, data_2)
+    mj.mj_forward(model, data)
     # Compute keypoints positions
     joint_ids = [2, 4, 5, 6, 7, 9, 10, 11, 13, 14, 15, 17, 18, 19, 21, 22]
     body_ids = [21, 28, 33, 38, 43]
@@ -362,25 +363,28 @@ def hx(x):
         keypoints.insert(lista[i], data.xpos[j])
     keypoints_flat = np.array(keypoints).flatten()
     # Extract forces at fingerprints
-    z_force = x[2 * nq:]  # Forze predette ai polpastrelli
+    z_force = x[2*nq:]  # Forze predette ai polpastrelli
     # Combine keypoints positions and forces
     z = np.concatenate((keypoints_flat, z_force))
     # actualizar_grafica(np.array(keypoints))
     return z
 # UKF 
-points = MerweScaledSigmaPoints(dim_x, alpha=1, beta=2., kappa=0)
-ukf = UKF(dim_x=dim_x, dim_z=dim_z, fx=None, hx=None, dt=0.002, points=points)
+dim_x = 2 * nq + nf
+# dim_z = nq + nf
+dim_z = 3 * nk + nf
+points = MerweScaledSigmaPoints(dim_x, alpha=1, beta=2., kappa=3-dim_x)
+# points = JulierSigmaPoints(dim_x, kappa=0)
+# points = SimplexSigmaPoints(dim_x, alpha=1)
+ukf = UKF(dim_x=dim_x, dim_z=dim_z, fx=fx, hx=hx, dt=0.002, points=points)
 ukf.x = np.zeros(dim_x)
 ukf.P *= 0.1
 ukf.Q = np.eye(dim_x) * 0.01
-R_pos = np.eye(dim_z-nf) * 0.1  
+R_pos = np.eye(dim_z-nf) * 0.0001  
 R_force = np.eye(nf) * 0.05 
 ukf.R = np.block([
             [R_pos, np.zeros((dim_z-nf, nf))],
             [np.zeros((nf, dim_z-nf)), R_force]
-        ]) 
-ukf.fx = fx
-ukf.hx = hx
+        ])
 
 # LOOP
 obs = env.reset()
@@ -409,6 +413,7 @@ for idx in tqdm(range(kinematics.shape[0])):
     real_time_simulation[idx,:] = data_test.time
     kinetics_predicted[idx,:] = np.hstack((kinetics[idx,0], x[2*nq:]))
     all_frcs[idx,:,0] = np.hstack((kinetics[idx,0], x[2*nq:]))
+    
     # vector_total = []
     # joint_ids = [2, 4, 5, 6, 7, 9, 10, 11, 13, 14, 15, 17, 18, 19, 21, 22]
     # body_ids = [21, 28, 33, 38, 43]
