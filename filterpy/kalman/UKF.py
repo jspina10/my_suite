@@ -293,7 +293,7 @@ class UnscentedKalmanFilter(object):
 
         """
 
-        #pylint: disable=too-many-arguments
+        # pylint: disable=too-many-arguments
 
         self.x = zeros(dim_x)
         self.P = eye(dim_x)
@@ -403,8 +403,8 @@ class UnscentedKalmanFilter(object):
         self.x, self.P = UT(self.sigmas_f, self.Wm, self.Wc, self.Q,
                             self.x_mean, self.residual_x)
 
-        # update sigma points to reflect the new variance of the points
-        self.sigmas_f = self.points_fn.sigma_points(self.x, self.P)
+        # # update sigma points to reflect the new variance of the points
+        # self.sigmas_f = self.points_fn.sigma_points(self.x, self.P)
 
         # save prior
         self.x_prior = np.copy(self.x)
@@ -472,7 +472,6 @@ class UnscentedKalmanFilter(object):
         # compute cross variance of the state and the measurements
         Pxz = self.cross_variance(self.x, zp, self.sigmas_f, self.sigmas_h)
 
-
         self.K = dot(Pxz, self.SI)        # Kalman gain
         self.y = self.residual_z(z, zp)   # residual
 
@@ -489,6 +488,8 @@ class UnscentedKalmanFilter(object):
         self._log_likelihood = None
         self._likelihood = None
         self._mahalanobis = None
+
+        return zp 
 
     def cross_variance(self, x, z, sigmas_f, sigmas_h):
         """
