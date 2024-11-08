@@ -290,8 +290,6 @@ nq = model_test.nq
 nu = model_test.nu
 nf = 5
 nk = 21
-dim_x = 2 * nq + nf
-dim_z = nq + nf
 kinematics = pd.read_csv(os.path.join(os.path.dirname(__file__), "trajectories/traj_standard.csv")).values
 kinematics_keypoints = np.zeros((kinematics.shape[0], 1+3*nk))
 kinematics_keypoints[:,0] = kinematics[:,0]
@@ -326,8 +324,10 @@ def hx(x):
     z = np.concatenate((z_pos, z_force))
     return z    
 # UKF 
-points = MerweScaledSigmaPoints(dim_x, alpha=1, beta=2., kappa=0)
-ukf = UKF(dim_x=dim_x, dim_z=dim_z, fx=None, hx=None, dt=0.002, points=points)
+dim_x = 2 * nq + nf
+dim_z = nq + nf
+points = MerweScaledSigmaPoints(dim_x, alpha=0.1, beta=2., kappa=0)
+ukf = UKF(dim_x=dim_x, dim_z=dim_z, fx=fx, hx=hx, dt=0.002, points=points)
 ukf.x = np.zeros(dim_x)
 ukf.P *= 0.1
 ukf.Q = np.eye(dim_x) * 0.01
@@ -336,36 +336,35 @@ R_force = np.eye(nf) * 0.05
 ukf.R = np.block([
             [R_pos, np.zeros((dim_z-nf, nf))],
             [np.zeros((nf, dim_z-nf)), R_force]
-        ]) 
-ukf.fx = fx
-ukf.hx = hx
+        ])
 
 # LOOP
 obs = env.reset()
 frames = []
 for idx in tqdm(range(kinematics.shape[0])):
+# for idx in tqdm(range(1000)):
     # Reference 
     data_ref.qpos = kinematics[idx, 1:]
     mj.mj_step1(model_ref, data_ref)
 
 
 
-    # pos_joints = data.xanchor
-    # vector_total = []
-    # joint_ids = [2, 4, 5, 6, 7, 9, 10, 11, 13, 14, 15, 17, 18, 19, 21, 22]
-    # body_ids = [21, 28, 33, 38, 43]
-    # lista = [4, 8, 12, 16, 20]
-    # for i in joint_ids:
-    #     joint_id = i
-    #     joint_name_offset = model.name_jntadr[joint_id]
-    #     joint_name = mj.mj_id2name(model, mj.mjtObj.mjOBJ_JOINT, joint_id)
-    #     vector_total.append(pos_joints[i])    
-    # for i, j in enumerate(body_ids):
-    #     vector_total.insert(lista[i], data_ref.xpos[j])
-    # vector_total = np.array(vector_total)
+    pos_joints = data.xanchor
+    vector_total = []
+    joint_ids = [2, 4, 5, 6, 7, 9, 10, 11, 13, 14, 15, 17, 18, 19, 21, 22]
+    body_ids = [21, 28, 33, 38, 43]
+    lista = [4, 8, 12, 16, 20]
+    for i in joint_ids:
+        joint_id = i
+        joint_name_offset = model.name_jntadr[joint_id]
+        joint_name = mj.mj_id2name(model, mj.mjtObj.mjOBJ_JOINT, joint_id)
+        vector_total.append(pos_joints[i])    
+    for i, j in enumerate(body_ids):
+        vector_total.insert(lista[i], data_ref.xpos[j])
+    vector_total = np.array(vector_total)
     # actualizar_grafica(vector_total)
-    # keypoints_flat = np.array(vector_total).flatten()
-    # kinematics_keypoints[idx,1:] = keypoints_flat
+    keypoints_flat = np.array(vector_total).flatten()
+    kinematics_keypoints[idx,1:] = keypoints_flat
 
 
     # Prediction UKF
