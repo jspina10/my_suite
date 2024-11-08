@@ -271,6 +271,7 @@
                                       <site name="THtip" size="0.005" pos=".010 -.020 -.008" rgba=".8 0 0 1"/>
 
                                         <body name="distal_thumb_f" pos="0.006215 -0.015192 -0.006326" euler="-0.99 0.94 -0.54">
+                                          <site name="distal_thumb_f" pos="0.006215 -0.015192 -0.006326" euler="-0.99 0.94 -0.54"/>
                                           <!-- <geom mesh="thumbdist_f" name="thumbdist_f" type="mesh"/> -->
                                         </body>
 
@@ -410,6 +411,7 @@
                                       <site name="IFtip" size="0.005" pos=".002 -.018 -.00" rgba="0 0.8 0 1"/>
 
                                         <body name="2distph_f" pos="0.001703 -0.015073 -0.000292" euler="-0.24 0.08 -0.01">
+                                          <site name="2distph_f" pos="0.001703 -0.015073 -0.000292" euler="-0.24 0.08 -0.01"/>
                                           <!-- <geom mesh="2distph_f" name="2distph_f" type="mesh"/> -->
                                         </body>
 
@@ -515,6 +517,7 @@
                                       <site name="MFtip" size="0.005" pos=".002 -.019 -.001" rgba="0 0 0.8 1"/>
 
                                         <body name="3distph_f" pos="0.000641 -0.015488 -0.000898" euler="-0.14 -0.05 0">
+                                          <site name="3distph_f" pos="0.000641 -0.015488 -0.000898" euler="-0.14 -0.05 0"/>
                                           <!-- <geom mesh="3distph_f" name="3distph_f" type="mesh"/> -->
                                         </body>
 
@@ -618,6 +621,7 @@
                                       <site name="RFtip" size="0.005" pos="-.001 -.018 .001" rgba="0.8 0.8 0 1"/>
 
                                       <body name="4distph_f" pos="-0.000731 -0.016007 0.000903" euler="-0.18 -0.51 0.05">
+                                        <site name="4distph_f" pos="-0.000731 -0.016007 0.000903" euler="-0.18 -0.51 0.05"/>
                                         <!-- <geom mesh="4distph_f" name="4distph_f" type="mesh"/> -->
                                       </body>
 
@@ -716,6 +720,7 @@
                                       <site name="LFtip" size="0.005" pos="-.001 -.017 -.003" rgba="0.8 0 0.8 1"/>
 
                                         <body name="5distph_f" pos="-0.001355 -0.013639 -0.001885" euler="-0.07 -0.73 0.03">
+                                          <site name="5distph_f" pos="-0.001355 -0.013639 -0.001885" euler="-0.07 -0.73 0.03"/>
                                           <!-- <geom mesh="5distph_f" name="5distph_f" type="mesh"/> -->
                                         </body>
 
