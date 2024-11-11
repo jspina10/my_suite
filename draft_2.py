@@ -378,7 +378,12 @@ points = MerweScaledSigmaPoints(dim_x, alpha=alpha, beta=beta, kappa=kappa)
 ukf = UKF(dim_x=dim_x, dim_z=dim_z, fx=fx, hx=hx, dt=0.002, points=points)
 ukf.x = np.zeros(dim_x)
 ukf.P *= 0.1
-ukf.Q = np.eye(dim_x) * 0.01
+Q_pos = np.eye(dim_x-nf) * 0.01  
+Q_force = np.eye(nf) * 0.005 
+ukf.Q = np.block([
+            [Q_pos, np.zeros((dim_x-nf, nf))],
+            [np.zeros((nf, dim_x-nf)), Q_force]
+        ])
 R_pos = np.eye(dim_z-nf) * 0.001  
 R_force = np.eye(nf) * 0.05 
 ukf.R = np.block([
@@ -402,10 +407,10 @@ for idx in tqdm(range(kinematics.shape[0])):
     # mj.mj_step1(model_ref, data_ref)
 
     # Prediction UKF
-    ukf.predict()
     kinematics_row = kinematics[idx, 1:] 
     kinetics_row = kinetics[idx, 1:]
     z = np.concatenate((kinematics_row, kinetics_row))
+    ukf.predict()
     ukf.update(z)
     x = ukf.x
 
@@ -413,7 +418,18 @@ for idx in tqdm(range(kinematics.shape[0])):
     real_time_simulation[idx,:] = data_test.time
     kinetics_predicted[idx,:] = np.hstack((kinetics[idx,0], x[2*nq:]))
     all_frcs[idx,:,0] = np.hstack((kinetics[idx,0], x[2*nq:]))
-    
+
+    # Inverse Dynamics
+    target_qpos = x[:nq]
+    qfrc = get_qfrc(model_test, data_test, target_qpos)
+    # Quadratic Problem
+    ctrl = get_ctrl(model_test, data_test, target_qpos, qfrc, 100, 5)
+    data_test.ctrl = ctrl
+    mj.mj_step(model_test, data_test)
+    all_qpos[idx,:,0] = np.hstack((kinematics[idx, 0], data_test.qpos))
+    all_qfrc[idx,:] = np.hstack((kinematics[idx, 0], qfrc))
+    all_ctrl[idx,:] = np.hstack((kinematics[idx, 0], ctrl))
+
     vector_total = []
     keypoints_flat = []
     joint_ids = [2, 4, 5, 6, 7, 9, 10, 11, 13, 14, 15, 17, 18, 19, 21, 22]
@@ -426,16 +442,7 @@ for idx in tqdm(range(kinematics.shape[0])):
     # actualizar_grafica(np.array(vector_total))
     keypoints_flat = np.array(vector_total).flatten()
     kinematics_predicted[idx,:] = np.hstack((kinematics[idx,0], keypoints_flat))
-    # Inverse Dynamics
-    target_qpos = x[:nq]
-    qfrc = get_qfrc(model_test, data_test, target_qpos)
-    all_qpos[idx,:,0] = np.hstack((kinematics_predicted[idx, 0], data_test.qpos))
-    all_qfrc[idx,:] = np.hstack((kinematics_predicted[idx, 0], qfrc))
-    # Quadratic Problem
-    ctrl = get_ctrl(model_test, data_test, target_qpos, qfrc, 100, 5)
-    data_test.ctrl = ctrl
-    mj.mj_step(model_test, data_test)
-    all_ctrl[idx,:] = np.hstack((kinematics_predicted[idx, 0], ctrl))
+
     # Rendering
     if not idx % round(0.3/(model_test.opt.timestep*25)):
         renderer_test.update_scene(data_test, camera=camera, scene_option=options_test)
@@ -446,8 +453,6 @@ error_rad = np.sqrt(((all_qpos[:,1:,0] - all_qpos[:,1:,-1])**2)).mean(axis=0)
 error_deg = (180*error_rad)/np.pi
 print(f'error max (rad): {error_rad.max()}')
 print(f'error max (deg): {error_deg.max()}')
-error_mm = np.sqrt(((kinematics[:,1:] - kinematics_predicted[:,1:])**2)).mean(axis=0)
-print(f'error max (mm): {1000*error_mm.max()}')
 joint_names = [model_test.joint(i).name for i in range(model_test.nq)]
 plot_qxxx(all_qpos, joint_names, ['Predicted qpos', 'Reference qpos'])
 plot_qxxx_2d(all_qfrc, joint_names, ['Predicted qfrc'])
