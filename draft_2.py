@@ -296,7 +296,7 @@ nk = 21
 # kinematics_keypoints = np.zeros((kinematics.shape[0], 1+3*21))
 # kinematics_keypoints[:,0] = kinematics[:,0]
 kinematics_qpos = pd.read_csv(os.path.join(os.path.dirname(__file__), "trajectories/traj_standard.csv")).values
-kinematics = pd.read_csv(os.path.join(os.path.dirname(__file__), "trajectories/traj_keypoints.csv")).values
+kinematics = pd.read_csv(os.path.join(os.path.dirname(__file__), "trajectories/traj_keypoints_ref.csv")).values
 kinetics = pd.read_csv(os.path.join(os.path.dirname(__file__), "trajectories/traj_force.csv")).values
 kinematics_predicted = np.zeros((kinematics.shape[0], kinematics.shape[1]))
 kinetics_predicted = np.zeros((kinetics.shape[0], kinetics.shape[1]))
@@ -338,19 +338,15 @@ def hx(x):
     Observation function:
     Maps the augmented state into the observating measurements.
     Includes the cartesian positions of the keypoints detected and the measured forces at the fingerprints.
-    
     Args:
     x: Augmented state vector [includes the state vector (positions, velocities) and the forces predicted].
-
     Returns:
     z: Measurements vector [includes the keypoints cartesian position and the measured forces].
     """
+    # Extract the joints position & velocity
     data.qpos[:] = x[:nq]
     data.qvel[:] = x[nq:2*nq]
-    # # Extract the joints position
-    # qpos = x[:nq]
-    # # Update model with the current state
-    # data.qpos[:] = qpos
+    # Update model with the current state
     mj.mj_forward(model, data)
     # Compute keypoints positions
     joint_ids = [2, 4, 5, 6, 7, 9, 10, 11, 13, 14, 15, 17, 18, 19, 21, 22]
@@ -372,14 +368,18 @@ def hx(x):
 dim_x = 2 * nq + nf
 # dim_z = nq + nf
 dim_z = 3 * nk + nf
-points = MerweScaledSigmaPoints(dim_x, alpha=1, beta=2., kappa=3-dim_x)
+alpha = 1
+beta = 2
+kappa = 3-dim_x
+print(f"UKF parameters for σ-points: α={alpha}, β={beta}, κ={kappa}")
+points = MerweScaledSigmaPoints(dim_x, alpha=alpha, beta=beta, kappa=kappa)
 # points = JulierSigmaPoints(dim_x, kappa=0)
 # points = SimplexSigmaPoints(dim_x, alpha=1)
 ukf = UKF(dim_x=dim_x, dim_z=dim_z, fx=fx, hx=hx, dt=0.002, points=points)
 ukf.x = np.zeros(dim_x)
 ukf.P *= 0.1
 ukf.Q = np.eye(dim_x) * 0.01
-R_pos = np.eye(dim_z-nf) * 0.0001  
+R_pos = np.eye(dim_z-nf) * 0.001  
 R_force = np.eye(nf) * 0.05 
 ukf.R = np.block([
             [R_pos, np.zeros((dim_z-nf, nf))],
@@ -414,18 +414,18 @@ for idx in tqdm(range(kinematics.shape[0])):
     kinetics_predicted[idx,:] = np.hstack((kinetics[idx,0], x[2*nq:]))
     all_frcs[idx,:,0] = np.hstack((kinetics[idx,0], x[2*nq:]))
     
-    # vector_total = []
-    # joint_ids = [2, 4, 5, 6, 7, 9, 10, 11, 13, 14, 15, 17, 18, 19, 21, 22]
-    # body_ids = [21, 28, 33, 38, 43]
-    # lista = [4, 8, 12, 16, 20]
-    # for i in joint_ids:
-    #     vector_total.append(data_test.xanchor[i])    
-    # for i, j in enumerate(body_ids):
-    #     vector_total.insert(lista[i], data_test.xpos[j])
+    vector_total = []
+    keypoints_flat = []
+    joint_ids = [2, 4, 5, 6, 7, 9, 10, 11, 13, 14, 15, 17, 18, 19, 21, 22]
+    body_ids = [21, 28, 33, 38, 43]
+    lista = [4, 8, 12, 16, 20]
+    for i in joint_ids:
+        vector_total.append(data_test.xanchor[i])    
+    for i, j in enumerate(body_ids):
+        vector_total.insert(lista[i], data_test.xpos[j])
     # actualizar_grafica(np.array(vector_total))
-    # keypoints_flat = np.array(vector_total).flatten()
-    # kinematics_predicted[idx,:] = np.hstack((kinematics[idx,0], keypoints_flat))
-
+    keypoints_flat = np.array(vector_total).flatten()
+    kinematics_predicted[idx,:] = np.hstack((kinematics[idx,0], keypoints_flat))
     # Inverse Dynamics
     target_qpos = x[:nq]
     qfrc = get_qfrc(model_test, data_test, target_qpos)
@@ -446,6 +446,8 @@ error_rad = np.sqrt(((all_qpos[:,1:,0] - all_qpos[:,1:,-1])**2)).mean(axis=0)
 error_deg = (180*error_rad)/np.pi
 print(f'error max (rad): {error_rad.max()}')
 print(f'error max (deg): {error_deg.max()}')
+error_mm = np.sqrt(((kinematics[:,1:] - kinematics_predicted[:,1:])**2)).mean(axis=0)
+print(f'error max (mm): {1000*error_mm.max()}')
 joint_names = [model_test.joint(i).name for i in range(model_test.nq)]
 plot_qxxx(all_qpos, joint_names, ['Predicted qpos', 'Reference qpos'])
 plot_qxxx_2d(all_qfrc, joint_names, ['Predicted qfrc'])

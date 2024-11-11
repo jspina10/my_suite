@@ -266,7 +266,7 @@ env = gym.make("my_MyoHandEnvForce-v0", frame_skip=1, normalize_act=False)
 model = env.sim.model._model
 data = mj.MjData(model) 
 tausmooth = 5
-# TEST
+### TEST
 model_test = env.sim.model._model
 model_test.actuator_dynprm[:,2] = tausmooth
 data_test = mj.MjData(model_test) 
@@ -276,7 +276,7 @@ options_test.flags[4] = 1 # actuator ON
 options_test.geomgroup[1:] = 0
 renderer_test = mj.Renderer(model_test)
 renderer_test.scene.flags[:] = 0
-# REFERENCE
+### REFERENCE
 model_ref = env.sim.model._model
 model_ref.actuator_dynprm[:,2] = tausmooth
 data_ref = mj.MjData(model_ref)
@@ -285,14 +285,16 @@ options_ref.flags[:] = 0
 options_ref.geomgroup[1:] = 0
 renderer_ref = mj.Renderer(model_ref)
 renderer_ref.scene.flags[:] = 0
-# DATA
+### DATA
 nq = model_test.nq
 nu = model_test.nu
 nf = 5
 nk = 21
 kinematics = pd.read_csv(os.path.join(os.path.dirname(__file__), "trajectories/traj_standard.csv")).values
-kinematics_keypoints = np.zeros((kinematics.shape[0], 1+3*nk))
-kinematics_keypoints[:,0] = kinematics[:,0]
+kinematics_keypoints_ref = np.zeros((kinematics.shape[0], 1+3*nk))
+kinematics_keypoints_ref[:,0] = kinematics[:,0]
+kinematics_keypoints_test = np.zeros((kinematics.shape[0], 1+3*nk))
+kinematics_keypoints_test[:,0] = kinematics[:,0]
 kinetics = pd.read_csv(os.path.join(os.path.dirname(__file__), "trajectories/traj_force.csv")).values
 kinematics_predicted = np.zeros((kinematics.shape[0], 1+nq))
 kinetics_predicted = np.zeros((kinetics.shape[0], 1+nf))
@@ -303,13 +305,13 @@ all_qfrc = np.zeros((kinematics.shape[0], 1+nq))
 all_ctrl = np.zeros((kinematics.shape[0], 1+nu))
 all_frcs =  np.zeros((kinetics.shape[0], 1+nf, 2))
 all_frcs[:,:,-1] = kinetics
-# CAMERA
+### CAMERA
 camera = mj.MjvCamera()
 camera.azimuth = 166.553
 camera.distance = 1.178
 camera.elevation = -36.793
 camera.lookat = np.array([-0.93762553, -0.34088276, 0.85067529])
-# FUNTIONS
+### FUNTIONS
 def fx(x, dt):
     data.qpos[:] = x[:nq]
     data.qvel[:] = x[nq:2*nq]
@@ -323,10 +325,14 @@ def hx(x):
     z_force = x[2*nq:]
     z = np.concatenate((z_pos, z_force))
     return z    
-# UKF 
+### UKF 
 dim_x = 2 * nq + nf
 dim_z = nq + nf
-points = MerweScaledSigmaPoints(dim_x, alpha=0.1, beta=2., kappa=0)
+alpha = 1
+beta = 2
+kappa = 0
+print(f"UKF parameters for σ-points: α={alpha}, β={beta}, κ={kappa}")
+points = MerweScaledSigmaPoints(dim_x, alpha=alpha, beta=beta, kappa=kappa)
 ukf = UKF(dim_x=dim_x, dim_z=dim_z, fx=fx, hx=hx, dt=0.002, points=points)
 ukf.x = np.zeros(dim_x)
 ukf.P *= 0.1
@@ -338,58 +344,63 @@ ukf.R = np.block([
             [np.zeros((nf, dim_z-nf)), R_force]
         ])
 
-# LOOP
+### LOOP
 obs = env.reset()
 frames = []
 for idx in tqdm(range(kinematics.shape[0])):
 # for idx in tqdm(range(1000)):
-    # Reference 
+    ## Reference 
     data_ref.qpos = kinematics[idx, 1:]
     mj.mj_step1(model_ref, data_ref)
-
-
-
-    pos_joints = data.xanchor
     vector_total = []
+    keypoints_flat = []
     joint_ids = [2, 4, 5, 6, 7, 9, 10, 11, 13, 14, 15, 17, 18, 19, 21, 22]
     body_ids = [21, 28, 33, 38, 43]
     lista = [4, 8, 12, 16, 20]
     for i in joint_ids:
-        joint_id = i
-        joint_name_offset = model.name_jntadr[joint_id]
-        joint_name = mj.mj_id2name(model, mj.mjtObj.mjOBJ_JOINT, joint_id)
-        vector_total.append(pos_joints[i])    
+        vector_total.append(data_ref.xanchor[i])    
     for i, j in enumerate(body_ids):
         vector_total.insert(lista[i], data_ref.xpos[j])
     vector_total = np.array(vector_total)
     # actualizar_grafica(vector_total)
     keypoints_flat = np.array(vector_total).flatten()
-    kinematics_keypoints[idx,1:] = keypoints_flat
+    kinematics_keypoints_ref[idx,1:] = keypoints_flat
 
-
-    # Prediction UKF
+    ## Prediction UKF
     kinematics_row = kinematics[idx, 1:] 
     kinetics_row = kinetics[idx, 1:]
     z = np.concatenate((kinematics_row, kinetics_row))
     ukf.predict()
     ukf.update(z)
     x = ukf.x
-    
-    real_time_simulation[idx,:] = data.time
+    ## Model Test
+    real_time_simulation[idx,:] = data_test.time
     kinematics_predicted[idx,:] = np.hstack((kinematics[idx,0], x[:nq]))
     kinetics_predicted[idx,:] = np.hstack((kinetics[idx,0], x[2*nq:]))
     all_frcs[idx,:,0] = np.hstack((kinetics[idx,0], x[2*nq:]))
-    # Inverse Dynamics
+    vector_total = []
+    keypoints_flat = []
+    joint_ids = [2, 4, 5, 6, 7, 9, 10, 11, 13, 14, 15, 17, 18, 19, 21, 22]
+    body_ids = [21, 28, 33, 38, 43]
+    lista = [4, 8, 12, 16, 20]
+    for i in joint_ids:
+        vector_total.append(data_test.xanchor[i])    
+    for i, j in enumerate(body_ids):
+        vector_total.insert(lista[i], data_test.xpos[j])
+    # actualizar_grafica(np.array(vector_total))
+    keypoints_flat = np.array(vector_total).flatten()
+    kinematics_keypoints_test[idx,1:] = keypoints_flat
+    ## Inverse Dynamics
     target_qpos = kinematics_predicted[idx, 1:]
     qfrc = get_qfrc(model_test, data_test, target_qpos)
     all_qpos[idx,:,0] = np.hstack((kinematics_predicted[idx, 0], data_test.qpos))
     all_qfrc[idx,:] = np.hstack((kinematics_predicted[idx, 0], qfrc))
-    # Quadratic Problem
+    ## Quadratic Problem
     ctrl = get_ctrl(model_test, data_test, target_qpos, qfrc, 100, 5)
     data_test.ctrl = ctrl
     mj.mj_step(model_test, data_test)
     all_ctrl[idx,:] = np.hstack((kinematics_predicted[idx, 0], ctrl))
-    # Rendering
+    ## Rendering
     if not idx % round(0.3/(model_test.opt.timestep*25)):
         renderer_ref.update_scene(data_ref, camera=camera, scene_option=options_ref)
         frame_ref = renderer_ref.render()
@@ -398,10 +409,13 @@ for idx in tqdm(range(kinematics.shape[0])):
         frame_merged = np.append(frame_ref, frame, axis=1)
         frames.append(frame_merged)
 
+### PRINTS & PLOTS
 error_rad = np.sqrt(((all_qpos[:,1:,0] - all_qpos[:,1:,-1])**2)).mean(axis=0)
 error_deg = (180*error_rad)/np.pi
 print(f'error max (rad): {error_rad.max()}')
 print(f'error max (deg): {error_deg.max()}')
+error_mm = np.sqrt(((kinematics_keypoints_ref[:,1:] - kinematics_keypoints_test[:,1:])**2)).mean(axis=0)
+print(f'error max (mm): {1000*error_mm.max()}')
 joint_names = [model.joint(i).name for i in range(nq)]
 plot_qxxx(all_qpos, joint_names, ['Predicted qpos', 'Reference qpos'])
 plot_qxxx_2d(all_qfrc, joint_names, ['Predicted qfrc'])
@@ -410,7 +424,7 @@ plot_uxxx_2d(all_ctrl, muscle_names, ['Predicted ctrl'])
 fingertips_names = ['Thumb Fingertip', 'Index Fingertip', 'Middle Fingertip', 'Ring Fingertip', 'Little Fingertip']
 plot_fxxx(all_frcs, fingertips_names, ['Predicted force', 'Reference force'])
 
-# SAVE
+### SAVE
 output_name = os.path.join(os.path.dirname(__file__), "videos/ukf2_draft.mp4")
 skvideo.io.vwrite(output_name, np.asarray(frames),outputdict={"-pix_fmt": "yuv420p"})
 output_path = os.path.join(os.path.dirname(__file__), "trajectories/simulation/kinematics_predicted_ukf2_draft.csv")
@@ -419,5 +433,7 @@ output_path = os.path.join(os.path.dirname(__file__), "trajectories/simulation/k
 pd.DataFrame(kinetics_predicted).to_csv(output_path, index=False, header=False)
 output_path = os.path.join(os.path.dirname(__file__), "trajectories/simulation/time_simulation_ukf2_draft.csv")
 pd.DataFrame(real_time_simulation).to_csv(output_path, index=False, header=False)
-output_path = os.path.join(os.path.dirname(__file__), "trajectories/simulation/kinematics_keypoints.csv")
-pd.DataFrame(kinematics_keypoints).to_csv(output_path, index=False, header=False)
+output_path = os.path.join(os.path.dirname(__file__), "trajectories/simulation/kinematics_keypoints_ref.csv")
+pd.DataFrame(kinematics_keypoints_ref).to_csv(output_path, index=False, header=False)
+output_path = os.path.join(os.path.dirname(__file__), "trajectories/simulation/kinematics_keypoints_test.csv")
+pd.DataFrame(kinematics_keypoints_test).to_csv(output_path, index=False, header=False)
