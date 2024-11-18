@@ -13,19 +13,19 @@
 
     <worldbody>
         <include file="assets/my_myohand_body_force.xml"/>
-        <body name="distal_thumb_f_target" pos="0.5 0 .5" quat="0 1 0 0" mocap="true">
+        <body name="distal_thumb_f_target" pos="0 0 0" quat="0 1 0 0" mocap="true">
             <geom type="sphere" size=".01" contype="0" conaffinity="0" rgba=".6 .3 .3 .2"/>
         </body>
-        <body name="2distph_f_target" pos="0.5 0 .5" quat="0 1 0 0" mocap="true">
+        <body name="2distph_f_target" pos="0 0 0" quat="0 1 0 0" mocap="true">
             <geom type="sphere" size=".01" contype="0" conaffinity="0" rgba=".6 .3 .3 .2"/>
         </body>
-        <body name="3distph_f_target" pos="0.5 0 .5" quat="0 1 0 0" mocap="true">
+        <body name="3distph_f_target" pos="0 0 0" quat="0 1 0 0" mocap="true">
             <geom type="sphere" size=".01" contype="0" conaffinity="0" rgba=".6 .3 .3 .2"/>
         </body>
-        <body name="4distph_f_target" pos="0.5 0 .5" quat="0 1 0 0" mocap="true">
+        <body name="4distph_f_target" pos="0 0 0" quat="0 1 0 0" mocap="true">
             <geom type="sphere" size=".01" contype="0" conaffinity="0" rgba=".6 .3 .3 .2"/>
         </body>
-        <body name="5distph_f_target" pos="0.5 0 .5" quat="0 1 0 0" mocap="true">
+        <body name="5distph_f_target" pos="0 0 0" quat="0 1 0 0" mocap="true">
             <geom type="sphere" size=".01" contype="0" conaffinity="0" rgba=".6 .3 .3 .2"/>
         </body>
     </worldbody>
