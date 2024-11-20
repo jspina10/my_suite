@@ -33,12 +33,12 @@ ax_2 = fig_2.add_subplot(111, projection='3d')
 ### INIT
 env = gym.make("my_MyoHandEnvForce-v0", frame_skip=1, normalize_act=False)
 model = env.sim.model._model
-data = mj.MjData(model) 
+data = mj.MjData(model)
 tausmooth = 5
 # TEST
 model_test = env.sim.model._model
 model_test.actuator_dynprm[:,2] = tausmooth
-data_test = mj.MjData(model_test) 
+data_test = mj.MjData(model_test)
 options_test = mj.MjvOption()
 options_test.flags[:] = 0
 options_test.flags[4] = 1 # actuator ON

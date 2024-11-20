@@ -32,7 +32,7 @@ register_env_with_variants(id='my_MyoHandEnvForce-v0',
             'target_jnt_value': np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
             'normalize_act': False,
             'pose_thd': .1,
-            'reset_type': "init",        # none, init, random, test, IC
+            'reset_type': "IC",        # none, init, random, test, IC
             'target_type': 'fixed',      # generate, fixed
         }
     )
