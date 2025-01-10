@@ -305,7 +305,7 @@ all_qpos = np.zeros((kinematics.shape[0], 1+nq, 2))
 all_qpos[:,:,-1] = kinematics_qpos[1:,:]
 all_qfrc = np.zeros((kinematics.shape[0], 1+nq))
 all_ctrl = np.zeros((kinematics.shape[0], 1+nu))
-all_frcs =  np.zeros((kinetics.shape[0], 1+nf, 2))
+all_frcs = np.zeros((kinetics.shape[0], 1+nf, 2))
 all_frcs[:,:,-1] = kinetics
 # CAMERA
 camera = mj.MjvCamera()
@@ -406,6 +406,9 @@ for idx in tqdm(range(kinematics.shape[0])):
     # data_ref.qpos = kinematics[idx, 1:]
     # mj.mj_step1(model_ref, data_ref)
 
+    if idx == 0:
+        data_test.qpos = np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+
     # Prediction UKF
     kinematics_row = kinematics[idx, 1:] 
     kinetics_row = kinetics[idx, 1:]
@@ -448,6 +451,20 @@ for idx in tqdm(range(kinematics.shape[0])):
         renderer_test.update_scene(data_test, camera=camera, scene_option=options_test)
         frame = renderer_test.render()
         frames.append(frame)
+
+# Error
+errors = []
+# Converts the computed cartesian keypoints positions into a NumPy array
+calculated_trajectories = np.array(kinematics_predicted[:,1:])
+for idx in range(kinematics.shape[0]):
+    original_positions = kinematics[idx, 1:]  # Posizioni originali dei punti chiave
+    calculated_positions = calculated_trajectories[idx]  # Posizioni calcolate dei punti chiave
+    # Calcola la distanza euclidea tra la traiettoria originale e quella calcolata
+    error = np.linalg.norm(original_positions - calculated_positions)
+    errors.append(error)
+# Compute the mean
+mean_error = np.mean(errors)
+print(f"Errore medio tra la traiettoria originale e quella calcolata: {mean_error}")
 
 error_rad = np.sqrt(((all_qpos[:,1:,0] - all_qpos[:,1:,-1])**2)).mean(axis=0)
 error_deg = (180*error_rad)/np.pi
