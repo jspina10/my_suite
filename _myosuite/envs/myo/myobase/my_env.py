@@ -203,7 +203,7 @@ class MyPoseEnv(BaseV0):
             jnt_init = np.array([-1.57,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])
             obs = super().reset(reset_qpos=jnt_init)
         elif self.reset_type == "IC":
-            # reste to init or initial position
+            # reset to initial position
             obs = super().reset(reset_qpos=initial_joint_positions)
         else:
             print("Reset Type not found")

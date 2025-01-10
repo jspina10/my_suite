@@ -7,3 +7,6 @@ WARNING: mju_openResource: unknown file '/Users/orestenipote/Archive/career/MSc/
 Fri Nov 15 21:22:24 2024
 WARNING: mju_openResource: unknown file '/Users/orestenipote/Archive/career/MSc/thesis/my_suite/mink/examples/shadow_hand.xml'
 
+Mon Nov 18 21:19:53 2024
+WARNING: mju_openResource: unknown file '/Users/orestenipote/Archive/career/MSc/thesis/my_suite/mink_test/shadow_hand/scene_left.xml'
+
